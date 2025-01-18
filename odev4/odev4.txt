@@ -1,0 +1,97 @@
+#include "adc.h"
+
+void LcdEnable(){  // Lcd Enable pin ac kapa (sinyal ac kapa)
+    GPIOPinWrite(LCDPORT,EN,0x02);
+    Beklet(1000);
+    GPIOPinWrite(LCDPORT,EN,0x00);
+}
+void Lcd_Komut_Gonder(char c) {   // Lcd ayarları icin rs=0' a cek data portlarına yaz enable ac kapa
+    GPIOPinWrite(LCDPORT,ALL_DATA,(c & 0xf0));
+    GPIOPinWrite(LCDPORT,RS,0x00);
+    LcdEnable();
+    Beklet(50000);
+
+    GPIOPinWrite(LCDPORT,ALL_DATA,(c & 0x0f)<<4); // Low nibble degerlerini maskeleme ile al
+    GPIOPinWrite(LCDPORT,RS,0x00);
+    LcdEnable();
+    Beklet(50000);
+}
+
+void Lcd_Tek_Karakter_Yaz(char c){  // Rs degerini 1'e cek data portlarına yaz ve enable(signal) pinin ac kapa
+    GPIOPinWrite(LCDPORT,ALL_DATA,(c & 0xf0));
+    GPIOPinWrite(LCDPORT,RS,0x01);
+    LcdEnable();
+    Beklet(50000);
+
+    GPIOPinWrite(LCDPORT,ALL_DATA,(c & 0x0f)<<4);
+    GPIOPinWrite(LCDPORT,RS,0x01);
+    LcdEnable();
+    Beklet(50000);
+}
+void LcdHome(){  // Lcd return home komutu
+    Lcd_Komut_Gonder(0x02);
+    Beklet(1000);
+}
+void Lcd_Temizle(void){ // Lcd ekranı temizle ve eve dön komutu
+    Lcd_Komut_Gonder(0x01);   //lcd clear
+    Lcd_Komut_Gonder(0x02);  //return home
+    Beklet(1000);
+}
+void LcdDisplayOn(){  // Lcd ekranı acık cursor ve blink kapalı
+    Lcd_Komut_Gonder(0x0c);  //sadece display on
+    Beklet(1000);
+}
+
+void LcdCursorOn(){ // Lcd ekranı acık cursor acık
+    Lcd_Komut_Gonder(0x0e); // hem display hem cursor
+    Beklet(1000);
+}
+void LcdBlinkOn(){ // Lcd ekranı cursor ve blink acık
+    Lcd_Komut_Gonder(0x0f);  // display cursor ve blink on
+    Beklet(1000);
+}
+
+void Lcd_Satir_Sutuna_Git(char row, char col){ // Lcd satir ve sutun ayarları
+    char adress;    // Baslangıc noktası 0,0 olarak ayarlandı
+    if(row == 0)
+        adress=0;
+    else if(row==1)
+        adress=0x40;
+    else
+        adress=0;
+    adress|=col;
+    Lcd_Komut_Gonder(0x80 | adress);  // Lcd ekranında adresleme 0x80h den baslar ve (gelen deger 0. satir ise 80h+sutun) (1.satir ise 80h+40h+sutun sayisi olur)
+}
+
+void Lcd_Cok_Karakter_Yaz(const char  dizi[], int dizisayisi){ //Lcd cok karakter yazması icin tek karakter yazma modunu bir dongu icersinde cagirdik
+    char i=0;
+    while(dizisayisi--){ // Dizinin eleman sayısı degeri 0 olmadıkca karakterleri ekrana bas
+        Lcd_Tek_Karakter_Yaz(dizi[i++]);
+    }
+}
+void Lcd_ilk_ayarlar(){ // Lcd baslangıc ayarları
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);    // 3 kez 30h gonder
+    GPIOPinTypeGPIOOutput(LCDPORT, 0xFF);
+    Beklet(50000);
+    GPIOPinWrite(LCDPORT,RS,0x00);
+    GPIOPinWrite(LCDPORT, ALL_DATA,  0x30 );
+    LcdEnable();
+    Beklet(50000);
+    GPIOPinWrite(LCDPORT, ALL_DATA,  0x30 );
+    LcdEnable();
+    Beklet(50000);
+    GPIOPinWrite(LCDPORT, ALL_DATA,  0x30 );
+    LcdEnable();
+    Beklet(50000);
+
+
+    GPIOPinWrite(LCDPORT, ALL_DATA,  0x20 ); //0B0010 // 4BIT LCD 0B001DL
+    Beklet(50000);
+    GPIOPinWrite(LCDPORT, ALL_DATA,  0xF0);  //0BNF** // N=1 İCİN 2 SATİR F=1 İCİN 5X10 DOT
+    Beklet(50000);
+
+    Lcd_Komut_Gonder(0x0e); // EKRAN ACIK kursor acık
+    Lcd_Komut_Gonder(0x01); // ekranı temizle
+    Lcd_Komut_Gonder(0x06); // entry mode set 0b0I/DS0 //ID=1 İMLEC OTO KAY S =0 EKRAN SABIT
+    Lcd_Temizle();
+}

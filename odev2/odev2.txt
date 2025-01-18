@@ -1,0 +1,154 @@
+#include <stdint.h>
+#include <string.h>
+#include <stdbool.h>
+#include "inc/hw_memmap.h"
+#include "inc/hw_types.h"
+#include "inc/hw_ints.h"
+#include "driverlib/sysctl.h"
+#include "driverlib/gpio.h"
+#include "driverlib/rom_map.h"
+#include "driverlib/timer.h"
+#include "driverlib/interrupt.h"
+#include "driverlib/adc.h"
+#include "driverlib/adc.c"
+#include "adc.h"
+
+int second=30,min=57,hour=1;
+ int temp;
+
+
+void adckesme(){
+    uint32_t gelendata[4];
+
+                        ADCSequenceDataGet( ADC0_BASE, 1 ,  gelendata);
+                        uint32_t ortalamadeger=(gelendata[0]+gelendata[1]+gelendata[2]+gelendata[3])/4 ;
+
+
+                        uint32_t  temp= (((2475 * ortalamadeger)/4096)-1475)/10;
+
+
+                        ADCIntClear(ADC0_BASE, 1);
+                        ADCProcessorTrigger(ADC0_BASE,1);
+
+}
+
+void LcdClockWrite(int second,int min,int hour){
+    int secondlow=second%10;
+    int secondhigh=second/10;
+    int minlow=min%10;
+    int minhigh=min/10;
+    int hourlow=hour%10;
+    int hourhigh=hour/10;
+    Lcd_Temizle();
+    Lcd_Satir_Sutuna_Git(0,0);
+    Lcd_Cok_Karakter_Yaz("TIME", 4);
+    Lcd_Satir_Sutuna_Git(0,7);
+    Lcd_Tek_Karakter_Yaz(48+hourhigh);
+    Lcd_Satir_Sutuna_Git(0,8);
+    Lcd_Tek_Karakter_Yaz(48+hourlow);
+    Lcd_Satir_Sutuna_Git(0,9);
+    Lcd_Tek_Karakter_Yaz(':');
+    Lcd_Satir_Sutuna_Git(0,10);
+    Lcd_Tek_Karakter_Yaz(48+minhigh);
+    Lcd_Satir_Sutuna_Git(0,11);
+    Lcd_Tek_Karakter_Yaz(48+minlow);
+    Lcd_Satir_Sutuna_Git(0,12);
+    Lcd_Tek_Karakter_Yaz(':');
+    Lcd_Satir_Sutuna_Git(0,13);
+    Lcd_Tek_Karakter_Yaz(secondhigh+48);
+    Lcd_Satir_Sutuna_Git(0,14);
+    Lcd_Tek_Karakter_Yaz(secondlow+48);
+}
+void TimeIntFunc(){
+    TimerIntClear(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
+    second++;
+    if(second==60){
+        second=0;
+        min++;
+        if(min==60){
+            min=0;
+            hour++;
+            if(hour==24)
+                hour=0;
+        }
+    }
+    LcdClockWrite(second, min, hour);
+}
+void LcdTempYaz(temp){
+    uint32_t gelendata[4];
+    ADCSequenceDataGet( ADC0_BASE, 1 ,  gelendata);
+    uint32_t ortalamadeger=(gelendata[0]+gelendata[1]+gelendata[2]+gelendata[3]) / 4 ;
+    temp= (1475 - ((2475 * ortalamadeger) / 4096)) / 10;
+    int onlar=(temp%100)/10+0x30;
+    int birler=(temp%100)%10+0x30;
+    Lcd_Temizle();
+    Lcd_Satir_Sutuna_Git(1,0);
+    Lcd_Cok_Karakter_Yaz("TEMP", 4);
+    Lcd_Satir_Sutuna_Git(1,4);
+    Lcd_Tek_Karakter_Yaz(':');
+    Lcd_Satir_Sutuna_Git(1,5);
+    Lcd_Tek_Karakter_Yaz(onlar);
+    Lcd_Satir_Sutuna_Git(1,6);
+    Lcd_Tek_Karakter_Yaz(birler);
+    Lcd_Satir_Sutuna_Git(1,7);
+    Lcd_Tek_Karakter_Yaz('C');
+}
+
+void InitSettings(){
+    SysCtlClockSet(SYSCTL_OSC_MAIN|SYSCTL_USE_PLL|SYSCTL_XTAL_16MHZ|SYSCTL_SYSDIV_5);
+    Lcd_ilk_ayarlar();
+    LcdDisplayOn();
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
+    TimerConfigure(TIMER0_BASE, TIMER_CFG_A_PERIODIC);
+    TimerLoadSet(TIMER0_BASE, TIMER_A, SysCtlClockGet()); //1 sn ayarlandý
+    // kesme ayar
+    //2 GLOBAL
+    IntMasterEnable();
+    IntEnable(INT_TIMER0A);
+    //3 LOCAL
+    TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
+    TimerIntClear(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
+    TimerIntRegister(TIMER0_BASE, TIMER_A, TimeIntFunc);
+
+
+        SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
+        SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC0);
+
+
+        ADCSequenceConfigure(ADC0_BASE, 1 ,ADC_TRIGGER_PROCESSOR, 0);//ADC0 KULLAN SEQUENCE 1 SEÇ
+
+
+
+        ADCSequenceConfigure(ADC0_BASE, 1, 0, ADC_CTL_TS);//PE3 SICAKLIK SENSÖRÜ SEÇİLDİ
+        ADCSequenceConfigure(ADC0_BASE, 1, 1, ADC_CTL_TS);
+        ADCSequenceConfigure(ADC0_BASE, 1, 2, ADC_CTL_TS);
+        ADCSequenceConfigure(ADC0_BASE, 1, 3, ADC_CTL_TS|ADC_CTL_IE|ADC_CTL_END);
+
+        ADCSequenceEnable(ADC0_BASE,1);
+
+
+
+        IntMasterEnable();
+        IntEnable(INT_ADC0SS1);
+
+
+
+        ADCIntClear(ADC0_BASE, 1);
+        ADCIntRegister(ADC0_BASE,1 ,adckesme);
+        ADCIntEnable(ADC0_BASE,1);
+
+}
+
+void main(void)
+{
+    InitSettings();
+    //LcdClockWrite(second,min,hour);
+    //LcdTempYaz(temp);
+    TimerEnable(TIMER0_BASE, TIMER_A);
+    ADCProcessorTrigger(ADC0_BASE,1);
+    while(1)
+    {
+        LcdTempYaz(temp);
+        LcdClockWrite(second,min,hour);
+    }
+}
